@@ -206,10 +206,13 @@ def get_archive_url(url, timegate_uri=IA_TIMEGATE):
             url,
             timegate_uri=timegate_uri)
     except Exception:
+        try:
         # fallback: mementoweb provides a search across many existing web archives
-        archive = _get_closest_memento_url(
-            url,
-            timegate_uri=MEMENTO_TIMETRAVEL_TIMEGATE)
+            archive = _get_closest_memento_url(
+                url,
+                timegate_uri=MEMENTO_TIMETRAVEL_TIMEGATE)
+        except Exception as memento_exception:
+            pywikibot.output(memento_exception.message)
 
     # FIXME: Hack for T167463: Use https instead of http for archive.org links
     if archive.startswith('http://web.archive.org'):
