@@ -86,7 +86,7 @@ import socket
 import sys
 import threading
 import time
-import archivenow
+from archivenow import archivenow
 
 from functools import partial
 from time import sleep
@@ -155,6 +155,9 @@ ignorelist = [
     re.compile(r'https?\:\/\/\*(/.*)?'),
 ]
 
+PERMA_TIMEGATE = 'http://perma-archives.org/warc/timegate/'
+IA_TIMEGATE = 'http://web.archive.org/web/'
+MEMENTO_TIMETRAVEL_TIMEGATE = 'http://timetravel.mementoweb.org/timegate/'
 
 def _get_closest_memento_url(url, when=None, timegate_uri=None):
     """Get most recent memento for url."""
@@ -195,17 +198,18 @@ def _get_closest_memento_url(url, when=None, timegate_uri=None):
     return mementos['closest']['uri'][0]
 
 
-def get_archive_url(url):
+def get_archive_url(url, timegate_uri=IA_TIMEGATE):
     """Get archive URL."""
     # TODO: parameterize timegate_uri, rather than hard-coding these two
     try:
         archive = _get_closest_memento_url(
             url,
-            timegate_uri='http://web.archive.org/web/')
+            timegate_uri=timegate_uri)
     except Exception:
+        # fallback: mementoweb provides a search across many existing web archives
         archive = _get_closest_memento_url(
             url,
-            timegate_uri='http://timetravel.mementoweb.org/webcite/timegate/')
+            timegate_uri=MEMENTO_TIMETRAVEL_TIMEGATE)
 
     # FIXME: Hack for T167463: Use https instead of http for archive.org links
     if archive.startswith('http://web.archive.org'):
@@ -832,12 +836,11 @@ class DeadLinkReportThread(threading.Thread):
 
 
 class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
-
     """
     Bot which will archive web links.
     """
 
-    def __init__(self, generator, HTTPignore=None, day=7, site=True):
+    def __init__(self, generator, HTTPignore=None, day=7, site=True, perma_cc_api_key=None):
         """Constructor."""
         super(WeblinkArchiverRobot, self).__init__(
             generator=generator, site=site)
@@ -856,11 +859,15 @@ class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
         else:
             self.HTTPignore = HTTPignore
         self.day = day
+        self.perma_cc_api_key = perma_cc_api_key
 
     def treat_page(self):
         """Process one page."""
         page = self.current_page
         text = page.get()
+        # TODO: add logic for selecting which links in a page to archive
+        #   e.g. only links in citations, or links that are values of a particular
+        #   Semantic annotation
         for url in weblinksIn(text):
             ignoreUrl = False
             for ignoreR in ignorelist:
@@ -869,13 +876,21 @@ class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
             if not ignoreUrl:
                 # TODO: add archiving logic here
                 # * check for appropriate memento URL
+                archived_url = get_archive_url(url, timegate_uri=PERMA_TIMEGATE)
+
                 # * archive the URL via the archiving service
+                if not archived_url:
+                    if self.perma_cc_api_key:
+                        archive_results = archivenow.push(url, 'cc', ('cc_api_key=%s' % self.perma_cc_api_key))
+                        if archive_results:
+                            archived_url = archive_results[0]
+                            pywikibot.output('Successfully archived %s at %s' % (url, archived_url))
+                else:
+                    pywikibot.output('Found existing archive of %s at %s' % (url, archived_url))
                 # * add archive metadata to the page
 
                 # this was multithreaded in weblinkchecker.py
                 # multithreading/performance is not in my current scope
-                continue
-
 
 def RepeatPageGenerator():
     """Generator for pages in History."""
@@ -922,6 +937,7 @@ def main(*args):
     gen = None
     xmlFilename = None
     HTTPignore = []
+    perma_cc_api_key = None
 
     if isinstance(memento_client, ImportError):
         warn('memento_client not imported: %s' % memento_client, ImportWarning)
@@ -952,6 +968,8 @@ def main(*args):
                 xmlFilename = i18n.input('pywikibot-enter-xml-filename')
             else:
                 xmlFilename = arg[5:]
+        elif arg.startswith('-permacc:'):
+            perma_cc_api_key = str(arg[9:])
         else:
             genFactory.handleArg(arg)
 
@@ -972,7 +990,7 @@ def main(*args):
             pageNumber = max(240, config.max_external_links * 2)
             gen = pagegenerators.PreloadingGenerator(gen, groupsize=pageNumber)
         gen = pagegenerators.RedirectFilterPageGenerator(gen)
-        bot = WeblinkArchiverRobot(gen, HTTPignore, config.weblink_dead_days)
+        bot = WeblinkArchiverRobot(gen, HTTPignore, config.weblink_dead_days, perma_cc_api_key=perma_cc_api_key)
         try:
             bot.run()
         finally:
