@@ -200,7 +200,7 @@ def _get_closest_memento_url(url, when=None, timegate_uri=None):
 
 def get_archive_url(url, timegate_uri=IA_TIMEGATE):
     """Get archive URL."""
-    # TODO: parameterize timegate_uri, rather than hard-coding these two
+    archive = None
     try:
         archive = _get_closest_memento_url(
             url,
@@ -876,7 +876,10 @@ class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
             if not ignoreUrl:
                 # TODO: add archiving logic here
                 # * check for appropriate memento URL
-                archived_url = get_archive_url(url, timegate_uri=PERMA_TIMEGATE)
+                try:
+                    archived_url = get_archive_url(url, timegate_uri=PERMA_TIMEGATE)
+                except Exception:
+                    archived_url = None
 
                 # * archive the URL via the archiving service
                 if not archived_url:
