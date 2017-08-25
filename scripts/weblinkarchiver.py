@@ -884,8 +884,8 @@ class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
                 # * archive the URL via the archiving service
                 if not archived_url:
                     if self.perma_cc_api_key:
-                        archive_results = archivenow.push(url, 'cc', ('cc_api_key=%s' % self.perma_cc_api_key))
-                        if archive_results:
+                        archive_results = archivenow.push(url, 'cc', {'cc_api_key': self.perma_cc_api_key})
+                        if archive_results: # could do a better check that the operation was successful
                             archived_url = archive_results[0]
                             pywikibot.output('Successfully archived %s at %s' % (url, archived_url))
                 else:
