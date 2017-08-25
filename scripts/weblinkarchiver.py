@@ -865,6 +865,7 @@ class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
         """Process one page."""
         page = self.current_page
         text = page.get()
+        pywikibot.output(text)
         # TODO: add logic for selecting which links in a page to archive
         #   e.g. only links in citations, or links that are values of a particular
         #   Semantic annotation
@@ -884,10 +885,17 @@ class WeblinkArchiverRobot(SingleSiteBot, ExistingPageBot):
                 # * archive the URL via the archiving service
                 if not archived_url:
                     if self.perma_cc_api_key:
-                        archive_results = archivenow.push(url, 'cc', {'cc_api_key': self.perma_cc_api_key})
-                        if archive_results: # could do a better check that the operation was successful
+                        archive_results = archivenow.push(url,
+                                                          'cc',
+                                                          {'cc_api_key': self.perma_cc_api_key})
+                        if archive_results:
                             archived_url = archive_results[0]
-                            pywikibot.output('Successfully archived %s at %s' % (url, archived_url))
+                            if archived_url.lower().startswith('error'):
+                                pywikibot.warning('Failed to archive %s, with error %s'
+                                                  % (url, archived_url))
+                            else:
+                                pywikibot.output('Successfully archived %s at %s'
+                                                 % (url, archived_url))
                 else:
                     pywikibot.output('Found existing archive of %s at %s' % (url, archived_url))
                 # * add archive metadata to the page
